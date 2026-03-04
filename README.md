@@ -51,6 +51,8 @@ python timer.py
 
 ## exe のビルド方法
 
+このプロジェクトでは [PyInstaller](https://pyinstaller.org/) を使って単一の実行ファイルを生成します。通常は付属の PowerShell スクリプト `build.ps1` を使いますが、そちらが動かない場合や手動で実行したい場合は以下の手順を参照してください。
+
 ### 事前準備
 
 ```powershell
@@ -59,11 +61,33 @@ pip install pyinstaller
 
 ### ビルド実行
 
+#### 1. スクリプトを使う（推奨）
+
 ```powershell
 .\build.ps1
 ```
 
-`dist\30sec_draw.exe` が生成されます。
+内部では PyInstaller を探して以下のようなコマンドを実行します：
+
+```powershell
+pyinstaller --noconfirm --onefile --windowed --name 30sec_draw timer.py
+```
+
+または Python 実行ファイルが環境に応じて `python -m PyInstaller` を使う場合もあります。
+
+#### 2. 直接コマンドを叩く（スクリプトが動作しない時）
+
+```powershell
+pyinstaller --noconfirm --onefile --windowed --name 30sec_draw timer.py
+```
+
+あるいは Python モジュールとして実行する：
+
+```powershell
+python -m PyInstaller --noconfirm --onefile --windowed --name 30sec_draw timer.py
+```
+
+上記のいずれかで成功すれば、作業ディレクトリに `dist\30sec_draw.exe` が生成されます。ビルドが失敗する場合はエラーメッセージを確認し、PyInstaller のインストールやパス設定を見直してください。
 
 ---
 

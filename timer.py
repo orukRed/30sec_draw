@@ -17,7 +17,7 @@ from pathlib import Path
 
 # 設定ファイルのパス (スクリプトと同じディレクトリに保存)
 CONFIG_PATH = Path(__file__).parent / "config.json"
-DEFAULT_CONFIG = {"draw_time": 30, "interval": 5, "sets": 10}
+DEFAULT_CONFIG = {"draw_time": 90, "interval": 5, "sets": 10}
 
 # 高DPI対応
 try:
