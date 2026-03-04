@@ -1,0 +1,15 @@
+# PyInstaller ビルド成果物
+build/
+dist/
+*.spec
+
+# 設定ファイル（ユーザー固有の設定のため除外）
+config.json
+
+# Python キャッシュ
+__pycache__/
+*.pyc
+*.pyo
+
+# VS Code
+.vscode/
