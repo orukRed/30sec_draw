@@ -12,6 +12,12 @@ from tkinter import ttk, font as tkfont
 from enum import Enum
 import winsound
 import ctypes
+import json
+from pathlib import Path
+
+# 設定ファイルのパス (スクリプトと同じディレクトリに保存)
+CONFIG_PATH = Path(__file__).parent / "config.json"
+DEFAULT_CONFIG = {"draw_time": 30, "interval": 5, "sets": 10}
 
 # 高DPI対応
 try:
@@ -43,10 +49,18 @@ class DrawingTimer:
         self.total_sets = 0
         self.after_id: str | None = None
 
+        # 保存済み設定の読み込み
+        config = self._load_config()
+
         # tkinter 変数
-        self.draw_time_var = tk.IntVar(value=30)
-        self.interval_var = tk.IntVar(value=5)
-        self.sets_var = tk.IntVar(value=10)
+        self.draw_time_var = tk.IntVar(value=config["draw_time"])
+        self.interval_var = tk.IntVar(value=config["interval"])
+        self.sets_var = tk.IntVar(value=config["sets"])
+
+        # 設定変更時に自動保存
+        self.draw_time_var.trace_add("write", lambda *_: self._save_config())
+        self.interval_var.trace_add("write", lambda *_: self._save_config())
+        self.sets_var.trace_add("write", lambda *_: self._save_config())
 
         self._build_ui()
         self._update_button_states()
@@ -380,8 +394,44 @@ class DrawingTimer:
         self._update_display()
         self._update_button_states()
 
+    # ──────────────────────────────────────
+    #  設定の保存・読み込み
+    # ──────────────────────────────────────
+    @staticmethod
+    def _load_config() -> dict:
+        """config.json から設定を読み込む。なければデフォルト値を返す。"""
+        try:
+            data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            # 値のバリデーション
+            dt = int(data.get("draw_time", 30))
+            iv = int(data.get("interval", 5))
+            st = int(data.get("sets", 10))
+            # 範囲内にクランプ & 刻みに合わせる
+            dt = max(30, min(300, (dt // 30) * 30))
+            iv = max(1, min(10, iv))
+            st = max(1, min(20, st))
+            return {"draw_time": dt, "interval": iv, "sets": st}
+        except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError):
+            return dict(DEFAULT_CONFIG)
+
+    def _save_config(self):
+        """現在の設定値を config.json に保存する。"""
+        try:
+            config = {
+                "draw_time": self.draw_time_var.get(),
+                "interval": self.interval_var.get(),
+                "sets": self.sets_var.get(),
+            }
+            CONFIG_PATH.write_text(
+                json.dumps(config, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass  # 保存失敗は無視（読み取り専用環境など）
+
     def _on_closing(self):
         """ウィンドウ閉じ時のクリーンアップ"""
+        self._save_config()
         if self.after_id is not None:
             self.root.after_cancel(self.after_id)
         self.root.destroy()
