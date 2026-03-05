@@ -1,4 +1,4 @@
-# build.ps1 - 30sec_draw.exe を生成するスクリプト
+﻿# build.ps1 - 30sec_draw.exe を生成するスクリプト
 # 使い方: PowerShell で .\build.ps1 を実行
 
 $ScriptName = "timer.py"
@@ -26,8 +26,9 @@ if (-not $PyInstaller) {
 
 # 3. python -m PyInstaller でも試みる
 if (-not $PyInstaller) {
-  $pyExe = (Get-Command python -ErrorAction SilentlyContinue)?.Source
-  if ($pyExe) {
+  $pyCmdInfo = Get-Command python -ErrorAction SilentlyContinue
+  if ($pyCmdInfo) {
+    $pyExe = $pyCmdInfo.Source
     $testResult = & $pyExe -m PyInstaller --version 2>&1
     if ($LASTEXITCODE -eq 0) {
       $PyInstaller = "$pyExe -m PyInstaller"
