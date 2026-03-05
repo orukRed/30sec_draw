@@ -302,7 +302,8 @@ class DrawingTimer:
             self.after_id = self.root.after(1000, self._tick)
 
         elif self.phase == Phase.INTERVAL:
-            # インターバル終了 → 次のセットの描画フェーズへ
+            # インターバル終了 → 音を鳴らして次のセットの描画フェーズへ
+            winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
             self.current_set += 1
             self.phase = Phase.DRAWING
             self.remaining = self.draw_time_var.get()
