@@ -7,6 +7,7 @@
 - 描画時間終了時にWindows音で通知
 """
 
+import sys
 import tkinter as tk
 from tkinter import ttk, font as tkfont
 from enum import Enum
@@ -15,8 +16,13 @@ import ctypes
 import json
 from pathlib import Path
 
-# 設定ファイルのパス (スクリプトと同じディレクトリに保存)
-CONFIG_PATH = Path(__file__).parent / "config.json"
+# 設定ファイルのパス (実行ファイルと同じディレクトリに保存)
+# exe化時は exe の場所、.py 実行時はスクリプトの場所を基準にする
+if getattr(sys, 'frozen', False):
+    _APP_DIR = Path(sys.executable).parent
+else:
+    _APP_DIR = Path(__file__).parent
+CONFIG_PATH = _APP_DIR / "config.json"
 DEFAULT_CONFIG = {"draw_time": 90, "interval": 5, "sets": 10}
 
 # 高DPI対応
