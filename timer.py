@@ -446,6 +446,17 @@ class DrawingTimer:
 def main():
     root = tk.Tk()
     root.configure(bg="#1e1e2e")
+
+    # アイコン設定 (exe化時はバンドル内 or exe横、.py実行時はスクリプト横)
+    if getattr(sys, 'frozen', False):
+        icon_path = Path(getattr(sys, '_MEIPASS', '')) / "icon.ico"
+        if not icon_path.exists():
+            icon_path = _APP_DIR / "icon.ico"
+    else:
+        icon_path = _APP_DIR / "icon.ico"
+    if icon_path.exists():
+        root.iconbitmap(str(icon_path))
+
     DrawingTimer(root)
     root.mainloop()
 

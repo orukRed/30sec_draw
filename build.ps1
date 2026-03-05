@@ -49,9 +49,9 @@ Write-Host "[INFO] ビルド開始..." -ForegroundColor Cyan
 if ($PyInstaller -like "* -m *") {
     # python -m PyInstaller 形式
     $parts = $PyInstaller -split " -m "
-    & $parts[0] -m PyInstaller --noconfirm --onefile --windowed --name $AppName $ScriptName
+    & $parts[0] -m PyInstaller --noconfirm --onefile --windowed --icon icon.ico --add-data "icon.ico;." --name $AppName $ScriptName
 } else {
-    & $PyInstaller --noconfirm --onefile --windowed --name $AppName $ScriptName
+    & $PyInstaller --noconfirm --onefile --windowed --icon icon.ico --add-data "icon.ico;." --name $AppName $ScriptName
 }
 
 if ($LASTEXITCODE -eq 0) {
