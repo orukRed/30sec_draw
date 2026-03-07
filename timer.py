@@ -25,9 +25,9 @@ else:
 CONFIG_PATH = _APP_DIR / "config.json"
 DEFAULT_CONFIG = {"draw_time": 90, "interval": 5, "sets": 10}
 
-# 高DPI対応
+# 高DPI対応 (Per Monitor DPI Aware)
 try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)
 except Exception:
     pass
 
@@ -97,60 +97,56 @@ class DrawingTimer:
             background=SURFACE,
         )
 
+        # ─── スピナーボタン用スタイル ───
+        spin_btn_font = tkfont.Font(family="Yu Gothic UI", size=14, weight="bold")
+        style.configure(
+            "Spin.TButton",
+            font=spin_btn_font,
+            padding=(12, 4),
+        )
+        val_font = tkfont.Font(family="Consolas", size=14)
+
         # ─── 設定パネル ───
         settings_frame = ttk.Frame(self.root, padding=15)
         settings_frame.pack(fill="x")
 
+        # 値変更用ボタン群を作るヘルパー
+        self._setting_btns: list[tuple[ttk.Button, ttk.Button]] = []
+
+        def make_spinner_row(parent, label_text, var, vmin, vmax, step, fmt=str):
+            row = ttk.Frame(parent)
+            row.pack(fill="x", pady=4)
+            ttk.Label(row, text=label_text, width=16, anchor="e").pack(
+                side="left", padx=(0, 8)
+            )
+            val_lbl = tk.Label(
+                row, textvariable=var, font=val_font,
+                width=6, anchor="center", fg=FG, bg=SURFACE,
+                relief="flat", padx=4, pady=2,
+            )
+            btn_minus = ttk.Button(
+                row, text="−", style="Spin.TButton", width=3,
+                command=lambda: var.set(max(vmin, var.get() - step)),
+            )
+            btn_plus = ttk.Button(
+                row, text="＋", style="Spin.TButton", width=3,
+                command=lambda: var.set(min(vmax, var.get() + step)),
+            )
+            btn_minus.pack(side="left", padx=(0, 4))
+            val_lbl.pack(side="left", padx=2)
+            btn_plus.pack(side="left", padx=(4, 0))
+            self._setting_btns.append((btn_minus, btn_plus))
+            return row
+
         # 描画時間
-        row = ttk.Frame(settings_frame)
-        row.pack(fill="x", pady=3)
-        ttk.Label(row, text="描画時間 (秒):", width=16, anchor="e").pack(
-            side="left", padx=(0, 8)
-        )
-        self.draw_spin = ttk.Spinbox(
-            row,
-            from_=30,
-            to=300,
-            increment=30,
-            textvariable=self.draw_time_var,
-            width=8,
-            state="readonly",
-        )
-        self.draw_spin.pack(side="left")
-
+        make_spinner_row(settings_frame, "描画時間 (秒):",
+                         self.draw_time_var, 30, 300, 30)
         # インターバル
-        row2 = ttk.Frame(settings_frame)
-        row2.pack(fill="x", pady=3)
-        ttk.Label(row2, text="インターバル (秒):", width=16, anchor="e").pack(
-            side="left", padx=(0, 8)
-        )
-        self.interval_spin = ttk.Spinbox(
-            row2,
-            from_=1,
-            to=10,
-            increment=1,
-            textvariable=self.interval_var,
-            width=8,
-            state="readonly",
-        )
-        self.interval_spin.pack(side="left")
-
+        make_spinner_row(settings_frame, "インターバル (秒):",
+                         self.interval_var, 1, 10, 1)
         # セット数
-        row3 = ttk.Frame(settings_frame)
-        row3.pack(fill="x", pady=3)
-        ttk.Label(row3, text="セット数:", width=16, anchor="e").pack(
-            side="left", padx=(0, 8)
-        )
-        self.sets_spin = ttk.Spinbox(
-            row3,
-            from_=1,
-            to=20,
-            increment=1,
-            textvariable=self.sets_var,
-            width=8,
-            state="readonly",
-        )
-        self.sets_spin.pack(side="left")
+        make_spinner_row(settings_frame, "セット数:",
+                         self.sets_var, 1, 20, 1)
 
         # ─── セパレータ ───
         sep = tk.Frame(self.root, height=1, bg="#45475a")
@@ -261,11 +257,11 @@ class DrawingTimer:
         self.btn_skip.config(state=active_state)
         self.btn_stop.config(state=active_state)
 
-        # Spinbox: IDLEの時だけ変更可能
-        spin_state = "readonly" if is_idle else "disabled"
-        self.draw_spin.config(state=spin_state)
-        self.interval_spin.config(state=spin_state)
-        self.sets_spin.config(state=spin_state)
+        # 設定ボタン: IDLEの時だけ変更可能
+        btn_state = "normal" if is_idle else "disabled"
+        for btn_minus, btn_plus in self._setting_btns:
+            btn_minus.config(state=btn_state)
+            btn_plus.config(state=btn_state)
 
     # ──────────────────────────────────────
     #  タイマーロジック
