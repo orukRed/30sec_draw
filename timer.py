@@ -140,7 +140,7 @@ class DrawingTimer:
 
         # 描画時間
         make_spinner_row(settings_frame, "描画時間 (秒):",
-                         self.draw_time_var, 30, 300, 30)
+                         self.draw_time_var, 30, 600, 30)
         # インターバル
         make_spinner_row(settings_frame, "インターバル (秒):",
                          self.interval_var, 1, 10, 1)
