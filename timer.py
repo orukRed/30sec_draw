@@ -1,7 +1,7 @@
 """
 30秒ドローイングタイマー
 - 常に最前面に表示
-- 描画時間: 30秒～300秒 (30秒刻み)
+- 描画時間: 30秒～600秒 (30秒刻み)
 - インターバル: 1秒～10秒 (1秒刻み)
 - セット数: 1～20
 - 描画時間終了時にWindows音で通知
@@ -410,7 +410,7 @@ class DrawingTimer:
             iv = int(data.get("interval", 5))
             st = int(data.get("sets", 10))
             # 範囲内にクランプ & 刻みに合わせる
-            dt = max(30, min(300, (dt // 30) * 30))
+            dt = max(30, min(600, (dt // 30) * 30))
             iv = max(1, min(10, iv))
             st = max(1, min(20, st))
             return {"draw_time": dt, "interval": iv, "sets": st}
