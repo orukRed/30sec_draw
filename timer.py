@@ -23,7 +23,11 @@ if getattr(sys, 'frozen', False):
 else:
     _APP_DIR = Path(__file__).parent
 CONFIG_PATH = _APP_DIR / "config.json"
-DEFAULT_CONFIG = {"draw_time": 90, "interval": 5, "sets": 10}
+DEFAULT_CONFIG = {
+    "mode": "croquis",
+    "croquis": {"draw_time": 90, "interval": 5, "sets": 10},
+    "wandoro": {"draw_time_min": 60},
+}
 
 # 高DPI対応 (Per Monitor DPI Aware)
 try:
@@ -37,6 +41,11 @@ class Phase(Enum):
     DRAWING = "描画中"
     INTERVAL = "インターバル"
     PAUSED = "一時停止中"
+
+
+class Mode(Enum):
+    CROQUIS = "croquis"   # クロッキー (短時間 × 複数セット + インターバル)
+    WANDORO = "wandoro"   # ワンドロ (単発の長時間タイマー)
 
 
 class DrawingTimer:
@@ -58,15 +67,21 @@ class DrawingTimer:
         # 保存済み設定の読み込み
         config = self._load_config()
 
-        # tkinter 変数
-        self.draw_time_var = tk.IntVar(value=config["draw_time"])
-        self.interval_var = tk.IntVar(value=config["interval"])
-        self.sets_var = tk.IntVar(value=config["sets"])
+        # 現在のモード
+        self.mode = Mode(config["mode"])
+
+        # tkinter 変数 (クロッキー用)
+        self.draw_time_var = tk.IntVar(value=config["croquis"]["draw_time"])
+        self.interval_var = tk.IntVar(value=config["croquis"]["interval"])
+        self.sets_var = tk.IntVar(value=config["croquis"]["sets"])
+        # tkinter 変数 (ワンドロ用: 描画時間 分単位)
+        self.wandoro_min_var = tk.IntVar(value=config["wandoro"]["draw_time_min"])
 
         # 設定変更時に自動保存
         self.draw_time_var.trace_add("write", lambda *_: self._save_config())
         self.interval_var.trace_add("write", lambda *_: self._save_config())
         self.sets_var.trace_add("write", lambda *_: self._save_config())
+        self.wandoro_min_var.trace_add("write", lambda *_: self._save_config())
 
         self._build_ui()
         self._update_button_states()
@@ -106,9 +121,29 @@ class DrawingTimer:
         )
         val_font = tkfont.Font(family="Consolas", size=14)
 
-        # ─── 設定パネル ───
-        settings_frame = ttk.Frame(self.root, padding=15)
-        settings_frame.pack(fill="x")
+        # ─── タブ(モード切替)用スタイル ───
+        style.configure("TNotebook", background=BG, borderwidth=0)
+        style.configure(
+            "TNotebook.Tab",
+            background=SURFACE,
+            foreground=FG,
+            padding=(16, 6),
+            font=tkfont.Font(family="Yu Gothic UI", size=11),
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", ACCENT)],
+            foreground=[("selected", BG)],
+        )
+
+        # ─── 設定パネル (タブでモード切替) ───
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill="x", padx=15, pady=(15, 0))
+
+        croquis_frame = ttk.Frame(self.notebook, padding=15)
+        wandoro_frame = ttk.Frame(self.notebook, padding=15)
+        self.notebook.add(croquis_frame, text="クロッキー")
+        self.notebook.add(wandoro_frame, text="ワンドロ")
 
         # 値変更用ボタン群を作るヘルパー
         self._setting_btns: list[tuple[ttk.Button, ttk.Button]] = []
@@ -138,15 +173,27 @@ class DrawingTimer:
             self._setting_btns.append((btn_minus, btn_plus))
             return row
 
+        # ─── クロッキータブ ───
         # 描画時間
-        make_spinner_row(settings_frame, "描画時間 (秒):",
+        make_spinner_row(croquis_frame, "描画時間 (秒):",
                          self.draw_time_var, 30, 600, 30)
         # インターバル
-        make_spinner_row(settings_frame, "インターバル (秒):",
+        make_spinner_row(croquis_frame, "インターバル (秒):",
                          self.interval_var, 1, 10, 1)
         # セット数
-        make_spinner_row(settings_frame, "セット数:",
+        make_spinner_row(croquis_frame, "セット数:",
                          self.sets_var, 1, 20, 1)
+
+        # ─── ワンドロタブ ───
+        # 描画時間 (分): 単発タイマー
+        make_spinner_row(wandoro_frame, "描画時間 (分):",
+                         self.wandoro_min_var, 60, 180, 10)
+
+        # 起動時のモードに合わせてタブを選択
+        self.notebook.select(
+            1 if self.mode == Mode.WANDORO else 0
+        )
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
         # ─── セパレータ ───
         sep = tk.Frame(self.root, height=1, bg="#45475a")
@@ -205,6 +252,23 @@ class DrawingTimer:
         self.btn_stop.pack(side="left", padx=3, expand=True)
 
     # ──────────────────────────────────────
+    #  モード切替
+    # ──────────────────────────────────────
+    def _on_tab_changed(self, event=None):
+        """タブ切替時にモードを更新。動作中は切替を拒否して元へ戻す。"""
+        selected = self.notebook.index(self.notebook.select())
+        new_mode = Mode.WANDORO if selected == 1 else Mode.CROQUIS
+
+        # 待機中以外はモード変更不可 → 現在のモードのタブへ戻す
+        if self.phase != Phase.IDLE and new_mode != self.mode:
+            self.notebook.select(1 if self.mode == Mode.WANDORO else 0)
+            return
+
+        self.mode = new_mode
+        self._save_config()
+        self._update_display()
+
+    # ──────────────────────────────────────
     #  表示更新
     # ──────────────────────────────────────
     def _format_time(self, seconds: int) -> str:
@@ -216,10 +280,11 @@ class DrawingTimer:
 
         if self.phase == Phase.DRAWING:
             self.time_label.config(fg="#f38ba8")  # 赤系
-            self.status_label.config(
-                text=f"🖊 描画中 — セット {self.current_set}/{self.total_sets}",
-                fg="#f38ba8",
-            )
+            if self.mode == Mode.WANDORO:
+                text = "🖊 描画中"
+            else:
+                text = f"🖊 描画中 — セット {self.current_set}/{self.total_sets}"
+            self.status_label.config(text=text, fg="#f38ba8")
         elif self.phase == Phase.INTERVAL:
             self.time_label.config(fg="#89b4fa")  # 青系
             self.status_label.config(
@@ -228,10 +293,11 @@ class DrawingTimer:
             )
         elif self.phase == Phase.PAUSED:
             self.time_label.config(fg="#fab387")  # オレンジ系
-            self.status_label.config(
-                text=f"⏸ 一時停止中 — セット {self.current_set}/{self.total_sets}",
-                fg="#fab387",
-            )
+            if self.mode == Mode.WANDORO:
+                text = "⏸ 一時停止中"
+            else:
+                text = f"⏸ 一時停止中 — セット {self.current_set}/{self.total_sets}"
+            self.status_label.config(text=text, fg="#fab387")
         else:
             self.time_label.config(text="00:00", fg="#a6adc8")
             self.status_label.config(text="待機中", fg="#a6adc8")
@@ -313,9 +379,11 @@ class DrawingTimer:
         winsound.MessageBeep(winsound.MB_ICONHAND)
         self.phase = Phase.IDLE
         self.time_label.config(text="完了!", fg="#a6e3a1")
-        self.status_label.config(
-            text=f"✅ 全{self.total_sets}セット完了", fg="#a6e3a1"
-        )
+        if self.mode == Mode.WANDORO:
+            complete_text = "✅ 完了"
+        else:
+            complete_text = f"✅ 全{self.total_sets}セット完了"
+        self.status_label.config(text=complete_text, fg="#a6e3a1")
         self._update_button_states()
 
     # ──────────────────────────────────────
@@ -323,9 +391,15 @@ class DrawingTimer:
     # ──────────────────────────────────────
     def _start(self):
         """タイマーを開始"""
-        self.total_sets = self.sets_var.get()
+        if self.mode == Mode.WANDORO:
+            # ワンドロ: 単発タイマー (1セット・インターバルなし)
+            self.total_sets = 1
+            self.remaining = self.wandoro_min_var.get() * 60
+        else:
+            # クロッキー: 複数セット + インターバル
+            self.total_sets = self.sets_var.get()
+            self.remaining = self.draw_time_var.get()
         self.current_set = 1
-        self.remaining = self.draw_time_var.get()
         self.phase = Phase.DRAWING
         self.paused_phase = None
 
@@ -402,28 +476,58 @@ class DrawingTimer:
     # ──────────────────────────────────────
     @staticmethod
     def _load_config() -> dict:
-        """config.json から設定を読み込む。なければデフォルト値を返す。"""
+        """config.json から設定を読み込む。なければデフォルト値を返す。
+
+        モード別の新形式と、旧フラット形式 (draw_time/interval/sets が
+        トップレベル) の両方を読めるよう後方互換を持たせている。
+        """
+        defaults = DEFAULT_CONFIG
         try:
             data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-            # 値のバリデーション
-            dt = int(data.get("draw_time", 30))
-            iv = int(data.get("interval", 5))
-            st = int(data.get("sets", 10))
+            if not isinstance(data, dict):
+                raise ValueError
+
+            # クロッキー設定: 新形式は data["croquis"]、旧形式はトップレベル
+            cq = data.get("croquis", data)
+            dt = int(cq.get("draw_time", defaults["croquis"]["draw_time"]))
+            iv = int(cq.get("interval", defaults["croquis"]["interval"]))
+            st = int(cq.get("sets", defaults["croquis"]["sets"]))
             # 範囲内にクランプ & 刻みに合わせる
             dt = max(30, min(600, (dt // 30) * 30))
             iv = max(1, min(10, iv))
             st = max(1, min(20, st))
-            return {"draw_time": dt, "interval": iv, "sets": st}
+
+            # ワンドロ設定 (分単位、60〜180、10刻み)
+            wd = data.get("wandoro", {})
+            wm = int(wd.get("draw_time_min", defaults["wandoro"]["draw_time_min"]))
+            wm = max(60, min(180, round(wm / 10) * 10))
+
+            # モード文字列 (無効なら croquis)
+            mode = data.get("mode", "croquis")
+            if mode not in (m.value for m in Mode):
+                mode = "croquis"
+
+            return {
+                "mode": mode,
+                "croquis": {"draw_time": dt, "interval": iv, "sets": st},
+                "wandoro": {"draw_time_min": wm},
+            }
         except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError):
-            return dict(DEFAULT_CONFIG)
+            return json.loads(json.dumps(defaults))  # ディープコピー
 
     def _save_config(self):
         """現在の設定値を config.json に保存する。"""
         try:
             config = {
-                "draw_time": self.draw_time_var.get(),
-                "interval": self.interval_var.get(),
-                "sets": self.sets_var.get(),
+                "mode": self.mode.value,
+                "croquis": {
+                    "draw_time": self.draw_time_var.get(),
+                    "interval": self.interval_var.get(),
+                    "sets": self.sets_var.get(),
+                },
+                "wandoro": {
+                    "draw_time_min": self.wandoro_min_var.get(),
+                },
             }
             CONFIG_PATH.write_text(
                 json.dumps(config, indent=2, ensure_ascii=False),

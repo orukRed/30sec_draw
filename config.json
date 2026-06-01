@@ -1,5 +1,11 @@
 {
-  "draw_time": 60,
-  "interval": 10,
-  "sets": 10
+  "mode": "wandoro",
+  "croquis": {
+    "draw_time": 60,
+    "interval": 10,
+    "sets": 10
+  },
+  "wandoro": {
+    "draw_time_min": 60
+  }
 }
