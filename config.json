@@ -1,5 +1,26 @@
 {
-  "draw_time": 60,
-  "interval": 10,
-  "sets": 10
+  "mode": "wandoro",
+  "croquis": {
+    "draw_time": 60,
+    "interval": 10,
+    "sets": 10
+  },
+  "wandoro": {
+    "draw_time_min": 60,
+    "stages_enabled": false,
+    "stages": [
+      {
+        "label": "構図下書きペン入れ",
+        "at_min": 30
+      },
+      {
+        "label": "色塗り",
+        "at_min": 50
+      },
+      {
+        "label": "仕上げ",
+        "at_min": 60
+      }
+    ]
+  }
 }
