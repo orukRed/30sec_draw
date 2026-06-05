@@ -32,9 +32,9 @@ DEFAULT_CONFIG = {
         "draw_time_min": 60,
         "stages_enabled": False,
         "stages": [
-            {"label": "構図下書きペン入れ", "at_min": 30},
-            {"label": "色塗り", "at_min": 50},
-            {"label": "仕上げ", "at_min": 60},
+            {"label": "構図下書きペン入れ", "dur_min": 30},
+            {"label": "色塗り", "dur_min": 20},
+            {"label": "仕上げ", "dur_min": 10},
         ],
     },
 }
@@ -100,10 +100,10 @@ class DrawingTimer:
         self.wandoro_enabled_var = tk.BooleanVar(
             value=config["wandoro"]["stages_enabled"]
         )
-        # 工程の編集用変数 (ラベル, 累積分) のリスト
+        # 工程の編集用変数 (ラベル, 所要分) のリスト
         self.wandoro_stage_vars: list[tuple[tk.StringVar, tk.IntVar]] = []
         for stage in config["wandoro"]["stages"]:
-            self._make_stage_var(stage["label"], stage["at_min"])
+            self._make_stage_var(stage["label"], stage["dur_min"])
 
         # 設定変更時に自動保存
         self.draw_time_var.trace_add("write", lambda *_: self._save_config())
@@ -237,7 +237,7 @@ class DrawingTimer:
         ttk.Label(hdr, text="工程名", width=18, anchor="w").pack(
             side="left", padx=(0, 4)
         )
-        ttk.Label(hdr, text="終了(分)", anchor="w").pack(side="left")
+        ttk.Label(hdr, text="時間(分)", anchor="w").pack(side="left")
         # 各工程行を入れるコンテナ
         self.wandoro_rows_container = ttk.Frame(self.wandoro_staged_frame)
         self.wandoro_rows_container.pack(fill="x")
@@ -338,10 +338,10 @@ class DrawingTimer:
     # ──────────────────────────────────────
     #  ワンドロ工程エディタ
     # ──────────────────────────────────────
-    def _make_stage_var(self, label: str, at_min: int):
-        """工程1件分の (ラベル, 累積分) 変数を作成しリストへ追加。"""
+    def _make_stage_var(self, label: str, dur_min: int):
+        """工程1件分の (ラベル, 所要分) 変数を作成しリストへ追加。"""
         label_var = tk.StringVar(value=str(label))
-        min_var = tk.IntVar(value=int(at_min))
+        min_var = tk.IntVar(value=int(dur_min))
         label_var.trace_add("write", lambda *_: self._save_config())
         min_var.trace_add("write", lambda *_: self._save_config())
         self.wandoro_stage_vars.append((label_var, min_var))
@@ -389,9 +389,7 @@ class DrawingTimer:
 
     def _add_stage_clicked(self):
         """工程を1件追加する。"""
-        last = self.wandoro_stage_vars[-1][1].get() if self.wandoro_stage_vars else 0
-        at_min = min(STAGE_MAX, last + STAGE_STEP * 2)
-        self._make_stage_var("", at_min)
+        self._make_stage_var("", STAGE_STEP * 2)
         self._render_stages()
         self._save_config()
 
@@ -429,28 +427,19 @@ class DrawingTimer:
     def _build_stage_plan(self):
         """工程変数から (各工程の長さ[秒], ラベル) を構築する。
 
-        累積分(at_min)を昇順・狭義単調増加に正規化し、区間長へ変換する。
+        各工程の所要分(dur_min)をそのまま区間長へ変換する。行の順序を維持。
         有効な工程が無ければ ([], []) を返す。
         """
-        stages = []
+        durations, labels = [], []
         for label_var, min_var in self.wandoro_stage_vars:
             try:
-                at = int(min_var.get())
+                dur = int(min_var.get())
             except (tk.TclError, ValueError):
                 continue
-            if at < STAGE_MIN or at > STAGE_MAX:
+            if dur < STAGE_MIN or dur > STAGE_MAX:
                 continue
-            stages.append((label_var.get().strip(), at))
-        stages.sort(key=lambda s: s[1])
-
-        durations, labels = [], []
-        prev = 0
-        for label, at in stages:
-            if at <= prev:
-                continue  # 単調増加でなければスキップ
-            durations.append((at - prev) * 60)
-            labels.append(label or f"工程{len(labels) + 1}")
-            prev = at
+            durations.append(dur * 60)
+            labels.append(label_var.get().strip() or f"工程{len(labels) + 1}")
         return durations, labels
 
     # ──────────────────────────────────────
@@ -731,15 +720,31 @@ class DrawingTimer:
                 wd.get("stages_enabled", defaults["wandoro"]["stages_enabled"])
             )
             stages = []
-            for s in wd.get("stages", []) or []:
+            raw_stages = wd.get("stages", []) or []
+            # 新形式は所要分(dur_min)。旧形式は累積終了分(at_min)なので差分へ変換。
+            has_dur = any(
+                isinstance(s, dict) and "dur_min" in s for s in raw_stages
+            )
+            prev = 0
+            for s in raw_stages:
                 if not isinstance(s, dict):
                     continue
-                try:
-                    at = int(s.get("at_min"))
-                except (TypeError, ValueError):
+                if has_dur or "dur_min" in s:
+                    try:
+                        dur = int(s.get("dur_min"))
+                    except (TypeError, ValueError):
+                        continue
+                else:
+                    try:
+                        at = int(s.get("at_min"))
+                    except (TypeError, ValueError):
+                        continue
+                    dur = at - prev
+                    prev = at
+                if dur < STAGE_MIN:
                     continue
-                at = max(STAGE_MIN, min(STAGE_MAX, at))
-                stages.append({"label": str(s.get("label", "")), "at_min": at})
+                dur = max(STAGE_MIN, min(STAGE_MAX, dur))
+                stages.append({"label": str(s.get("label", "")), "dur_min": dur})
             if not stages:
                 stages = [dict(x) for x in defaults["wandoro"]["stages"]]
 
@@ -774,7 +779,7 @@ class DrawingTimer:
                     "draw_time_min": self.wandoro_min_var.get(),
                     "stages_enabled": self.wandoro_enabled_var.get(),
                     "stages": [
-                        {"label": label_var.get(), "at_min": min_var.get()}
+                        {"label": label_var.get(), "dur_min": min_var.get()}
                         for label_var, min_var in self.wandoro_stage_vars
                     ],
                 },
